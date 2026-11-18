@@ -69,6 +69,7 @@ void ANexusCharacterBase::PossessedBy(AController* NewController)
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		GrantAbilities(StartingAbilities);
 	}
 }
 
@@ -86,3 +87,49 @@ UAbilitySystemComponent* ANexusCharacterBase::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
 }
+
+TArray<FGameplayAbilitySpecHandle> ANexusCharacterBase::GrantAbilities(
+	TArray<TSubclassOf<UGameplayAbility>> AbilitiesToGrant)
+{
+	if (!AbilitySystemComponent || !HasAuthority())
+	{
+		return TArray<FGameplayAbilitySpecHandle>();
+	}
+	
+	TArray<FGameplayAbilitySpecHandle> AbilityHandles;
+	for (TSubclassOf<UGameplayAbility> Ability : AbilitiesToGrant)
+	{
+		FGameplayAbilitySpecHandle SpecHandle = AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(Ability, 1, -1, this));
+		AbilityHandles.Add(SpecHandle);
+	}
+	
+	SendAbilitiesChangedEvent();
+	return AbilityHandles;
+}
+
+void ANexusCharacterBase::RemoveAbilities(
+	TArray<FGameplayAbilitySpecHandle> AbilityHandlesToRemove)
+{
+	if (!AbilitySystemComponent || !HasAuthority())
+	{
+		return;
+	}
+	
+	for (FGameplayAbilitySpecHandle AbilityHandle : AbilityHandlesToRemove)
+	{
+		AbilitySystemComponent->ClearAbility(AbilityHandle);
+	}
+	
+	SendAbilitiesChangedEvent();
+}
+
+void ANexusCharacterBase::SendAbilitiesChangedEvent()
+{
+	FGameplayEventData EventData;
+	EventData.EventTag = FGameplayTag::RequestGameplayTag(FName("Event.Abilities.Changed"));
+	EventData.Instigator = this;
+	EventData.Target = this;
+	
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, EventData.EventTag, EventData);
+}
+
